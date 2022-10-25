@@ -4,25 +4,30 @@ from typing import NamedTuple
 from tqdm import tqdm
 import torch
 import torch.nn as nn
-import checkpoint
 
 class Config(NamedTuple):
     #'Hyperparameter collections.namedtuple()'
     seed: int = 3431 # random seed
-    batch_size: int = 32
+    batch_size: int = 64
     lr: int = 5e-5 # learning rate
     n_epochs: int = 10 # the number of epoch
     save_steps: int = 100 # interval for saving model
     total_steps: int = 100000 # total number of steps to train
+    momentum: float = 0.9
+    weight_decay: float = 0.0001
+
+    @classmethod
     def from_json(cls, file):
         return cls(**json.load(open(file,'r')))
 
 class Trainer(object):
-    def __init__(self, cfg, model, data_iter, optimizer, save_dir, device):
+    def __init__(self, cfg, model, train_loader, val_loader, optimizer, schedule, save_dir, device):
         self.cfg=cfg
         self.model=model
-        self.data_iter=data_iter
+        self.train_loader=train_loader
+        self.val_loader=val_loader
         self.optimizer=optimizer
+        self.schedule=schedule
         self.save_dir=save_dir
         self.device=device
     
@@ -31,12 +36,14 @@ class Trainer(object):
         model=self.model.to(self.device)
 
         global_step=0
-        iter_bar=tqdm(self.data_iter['train'], desc='Iter (loss=X.XXX)')
-        for epoch in range(self.cfg.n_epoches):
+        iter_bar=tqdm(self.train_loader, desc='Iter (loss=X.XXX)')
+        for epoch in range(self.cfg.n_epochs):
             loss_sum=0
-            for i, batch in enumerate(self.data_iter):
+            for i, batch in enumerate(iter_bar):
                 batch=[t.to(self.device) for t in batch]
+
                 loss=get_loss(model, batch, global_step)
+                self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
 
@@ -53,13 +60,14 @@ class Trainer(object):
                     self.save(global_step)
                     return
             print('Epoch %d/%d : Average Loss %5.3f'%(epoch+1, self.cfg.n_epochs, loss_sum/(i+1)))
+            self.schedule.step()
         self.save(global_step)
     
     def eval(self, evaluate):
         self.model.eval()
         model=self.model.to(self.device)
         results=[]
-        iter_bar=tqdm(self.data_iter['test'], desc='Iter (loss=X.XXX)')
+        iter_bar=tqdm(val_loader, desc='Iter (loss=X.XXX)')
         with torch.no_grad():
             for i, batch in enumerate(iter_bar):
                 batch=[t.to(self.device) for t in batch]
