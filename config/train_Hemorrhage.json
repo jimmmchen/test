@@ -1,0 +1,10 @@
+{
+    "seed": 42,
+    "batch_size": 64,
+    "lr": 0.01,
+    "n_epochs": 35,
+    "save_steps": 100,
+    "total_steps": 10000,
+    "momentum": 0.9,
+    "weight_decay": 0.0001
+}
