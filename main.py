@@ -11,6 +11,31 @@ import torchvision.transforms as transforms
 import model.resnet as resnet
 import train
 
+
+def preprocess():
+    labels = pd.read_csv("stage_2_train_labels.csv")
+    labels = labels.drop_duplicates("patientId")
+
+    ROOT_PATH = Path("stage_2_train_images")
+    SAVE_PATH = Path('output')
+
+    for c, patientid in enumerate(tqdm(labels.patientId)): 
+        patient_id=labels.patientId.iloc[c]
+        dcm_path=ROOT_PATH/patient_id
+        dcm_path=dcm_path.with_suffix(".dcm")
+        dcm=pydicom.read_file(dcm_path).pixel_array/255
+
+        dcm_array = cv2.resize(dcm, (224,224)).astype(np.float16)
+    
+        label = labels.Target.iloc[c]
+    
+        train_or_val = "train" if c < 24000 else "val"
+    
+        current_save_path = SAVE_PATH/train_or_val/str(label)
+        current_save_path.mkdir(parents=True, exist_ok=True)
+        np.save(current_save_path/patient_id, dcm_array)
+
+
 def load_file(path):
     return np.load(path).astype(np.float32)
 
@@ -28,7 +53,7 @@ def main(task='Hemorrhage',
 
         cfg=train.Config.from_json(train_cfg)
         #model_cfg=resnet.Config.from_json(model_cfg)
-
+        preprocess()
         #set_seeds(cfg.seed)
         
         train_transforms = transforms.Compose([
